@@ -57,11 +57,14 @@ DIGITAL = OUTPUT   # same as OUTPUT below
 # Time to wait after initializing serial, used in Board.__init__
 BOARD_SETUP_WAIT_TIME = 5
 
+
 class PinAlreadyTakenError(Exception):
     pass
 
+
 class InvalidPinDefError(Exception):
     pass
+
 
 class NoInputWarning(RuntimeWarning):
     pass
@@ -75,14 +78,14 @@ class Board(object):
     _command = None
     _stored_data = []
     _parsing_sysex = False
-    nearest_obstacle=[-1 for i in range(128)]
-    analog_value=[-1 for i in range(128)]
-    digital_value=[-1 for i in range(128)]
-    live_robots=[0 for i in range(128)]
-    
+    nearest_obstacle = [-1 for i in range(128)]
+    analog_value = [-1 for i in range(128)]
+    digital_value = [-1 for i in range(128)]
+    live_robots = [0 for i in range(128)]
+
     def __init__(self, port, layout, baudrate=57600, name=None):
-	try:        
-	    self.sp = serial.Serial(port, baudrate)
+        try:
+            self.sp = serial.Serial(port, baudrate)
             # Allow 5 secs for Arduino's auto-reset to happen
             # Alas, Firmata blinks its version before printing it to serial
             # For 2.3, even 5 seconds might not be enough.
@@ -95,16 +98,18 @@ class Board(object):
             # Iterate over the first messages to get firmware data
             while self.bytes_available():
                 self.iterate()
-            # TODO Test whether we got a firmware name and version, otherwise there 
+            # TODO Test whether we got a firmware name and version, otherwise there
             # probably isn't any Firmata installed
-	    self.running = 1
-	except serial.SerialException:
-	    if os.path.exists(port) and not os.access(port, os.R_OK | os.W_OK):
-	    	print "No tiene permisos para acceder al dispositivo, verifique si su usuario pertenece al grupo dialout"
-	    else:
-	    	print "No es posible conectarse al robot, por favor enchufe y configure el XBee"
-	    raise # re-raise the exception to allow the caller to handle this
-        
+            self.running = 1
+        except serial.SerialException:
+            if os.path.exists(port) and not os.access(port, os.R_OK | os.W_OK):
+                print ("No tiene permisos para acceder al dispositivo,"
+                      " verifique si su usuario pertenece al grupo dialout")
+            else:
+                print ("No es posible conectarse al robot, por favor enchufe y "
+                "configure el XBee")
+            raise  # re-raise the exception to allow the caller to handle this
+
     def __str__(self):
         return "Board %s on %s" % (self.name, self.sp.port)
 
@@ -133,7 +138,7 @@ class Board(object):
         self.digital = []
         self.digital_ports = []
         for i in xrange(0, len(board_layout['digital']), 8):
-            num_pins = len(board_layout['digital'][i:i+8])
+            num_pins = len(board_layout['digital'][i:i + 8])
             port_number = i / 8
             self.digital_ports.append(Port(self, port_number, num_pins))
 
@@ -162,7 +167,7 @@ class Board(object):
         self.add_cmd_handler(ANALOG_INPUT_REQUEST, self._handle_sysex_analog)
         self.add_cmd_handler(DIGITAL_INPUT_REQUEST, self._handle_sysex_digital)
         self.add_cmd_handler(BROADCAST_REPORT, self._handle_sysex_broadcast)
-    
+
     def add_cmd_handler(self, cmd, func):
         """Adds a command handler for a command."""
         len_args = len(inspect.getargspec(func)[0])
@@ -183,11 +188,11 @@ class Board(object):
         :arg pin_def: Pin definition as described below,
             but without the arduino name. So for example ``a:1:i``.
 
-        'a' analog pin     Pin number   'i' for input 
+        'a' analog pin     Pin number   'i' for input
         'd' digital pin    Pin number   'o' for output
                                         'p' for pwm (Pulse-width modulation)
 
-        All seperated by ``:``. 
+        All seperated by ``:``.
         """
         if type(pin_def) == list:
             bits = pin_def
@@ -352,30 +357,28 @@ class Board(object):
         minor = data[1]
         self.firmware_version = (major, minor)
         self.firmware = two_byte_iter_to_str(data[2:])
-        
-        
+
     def _handle_sysex_ping(self, *data):
         major = data[0]
-        minor = data[1]      
-	robot = data[2]          
-        self.nearest_obstacle[robot]= minor + major*128 
-
+        minor = data[1]
+        robot = data[2]
+        self.nearest_obstacle[robot] = minor + major * 128
 
     def _handle_sysex_analog(self, *data):
         major = data[0]
         minor = data[1]
-	robot = data[2]      
-        self.analog_value[robot]= minor + major*128 
+        robot = data[2]
+        self.analog_value[robot] = minor + major * 128
 
     def _handle_sysex_digital(self, *data):
         major = data[0]
-	robot = data[1]
-        self.digital_value[robot]= major 
-
+        robot = data[1]
+        self.digital_value[robot] = major
 
     def _handle_sysex_broadcast(self, *data):
-	robot = data[0]
-	self.live_robots[robot]=1
+        robot = data[0]
+        self.live_robots[robot] = 1
+
 
 class Port(object):
     """An 8-bit port on the board."""
@@ -400,7 +403,7 @@ class Port(object):
         self.board.sp.write(msg)
         for pin in self.pins:
             if pin.mode == INPUT:
-                pin.reporting = True # TODO Shouldn't this happen at the pin?
+                pin.reporting = True  # TODO Shouldn't this happen at the pin?
 
     def disable_reporting(self):
         """Disable the reporting of the port."""
