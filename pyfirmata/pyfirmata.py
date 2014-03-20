@@ -22,6 +22,12 @@ QUERY_FIRMWARE = 0x79       # query the firmware name
 
 # extended command set using sysex (0-127/0x00-0x7F)
 # 0x00-0x0F reserved for user-defined commands */
+SYSEX_PING = 0x03
+ANALOG_INPUT_REQUEST = 0x06
+DIGITAL_INPUT_REQUEST = 0x07
+BROADCAST_REPORT = 0x09
+
+
 SERVO_CONFIG = 0x70         # set max angle, minPulse, maxPulse, freq
 STRING_DATA = 0x71          # a string message with 14-bits per char
 SHIFT_DATA = 0x75           # a bitstream to/from a shift register
@@ -68,24 +74,36 @@ class Board(object):
     _command = None
     _stored_data = []
     _parsing_sysex = False
-
+    nearest_obstacle=[-1 for i in range(128)]
+    analog_value=[-1 for i in range(128)]
+    digital_value=[-1 for i in range(128)]
+    live_robots=[0 for i in range(128)]
+    
     def __init__(self, port, layout, baudrate=57600, name=None):
-        self.sp = serial.Serial(port, baudrate)
-        # Allow 5 secs for Arduino's auto-reset to happen
-        # Alas, Firmata blinks its version before printing it to serial
-        # For 2.3, even 5 seconds might not be enough.
-        # TODO Find a more reliable way to wait until the board is ready
-        self.pass_time(BOARD_SETUP_WAIT_TIME)
-        self.name = name
-        if not self.name:
-            self.name = port
-        self.setup_layout(layout)
-        # Iterate over the first messages to get firmware data
-        while self.bytes_available():
-            self.iterate()
-        # TODO Test whether we got a firmware name and version, otherwise there
-        # probably isn't any Firmata installed
-
+	try:        
+	    self.sp = serial.Serial(port, baudrate)
+            # Allow 5 secs for Arduino's auto-reset to happen
+            # Alas, Firmata blinks its version before printing it to serial
+            # For 2.3, even 5 seconds might not be enough.
+            # TODO Find a more reliable way to wait until the board is ready
+            self.pass_time(BOARD_SETUP_WAIT_TIME)
+            self.name = name
+            if not self.name:
+                self.name = port
+            self.setup_layout(layout)
+            # Iterate over the first messages to get firmware data
+            while self.bytes_available():
+                self.iterate()
+            # TODO Test whether we got a firmware name and version, otherwise there 
+            # probably isn't any Firmata installed
+	    self.running = 1
+	except serial.SerialException:
+	    if os.path.exists(port) and not os.access(port, os.R_OK | os.W_OK):
+	    	print "No tiene permisos para acceder al dispositivo, verifique si su usuario pertenece al grupo dialout"
+	    else:
+	    	print "No es posible conectarse al robot, por favor enchufe y configure el XBee"
+	    raise # re-raise the exception to allow the caller to handle this
+        
     def __str__(self):
         return "Board %s on %s" % (self.name, self.sp.port)
 
@@ -139,7 +157,11 @@ class Board(object):
         self.add_cmd_handler(DIGITAL_MESSAGE, self._handle_digital_message)
         self.add_cmd_handler(REPORT_VERSION, self._handle_report_version)
         self.add_cmd_handler(REPORT_FIRMWARE, self._handle_report_firmware)
-
+        self.add_cmd_handler(SYSEX_PING, self._handle_sysex_ping)
+        self.add_cmd_handler(ANALOG_INPUT_REQUEST, self._handle_sysex_analog)
+        self.add_cmd_handler(DIGITAL_INPUT_REQUEST, self._handle_sysex_digital)
+        self.add_cmd_handler(BROADCAST_REPORT, self._handle_sysex_broadcast)
+    
     def add_cmd_handler(self, cmd, func):
         """Adds a command handler for a command."""
         len_args = len(inspect.getargspec(func)[0])
@@ -298,6 +320,7 @@ class Board(object):
                     pin.mode = OUTPUT
         if hasattr(self, 'sp'):
             self.sp.close()
+        self.running = 0
 
     # Command handlers
     def _handle_analog_message(self, pin_nr, lsb, msb):
@@ -328,6 +351,30 @@ class Board(object):
         minor = data[1]
         self.firmware_version = (major, minor)
         self.firmware = two_byte_iter_to_str(data[2:])
+        
+        
+    def _handle_sysex_ping(self, *data):
+        major = data[0]
+        minor = data[1]      
+	robot = data[2]          
+        self.nearest_obstacle[robot]= minor + major*128 
+
+
+    def _handle_sysex_analog(self, *data):
+        major = data[0]
+        minor = data[1]
+	robot = data[2]      
+        self.analog_value[robot]= minor + major*128 
+
+    def _handle_sysex_digital(self, *data):
+        major = data[0]
+	robot = data[1]
+        self.digital_value[robot]= major 
+
+
+    def _handle_sysex_broadcast(self, *data):
+	robot = data[0]
+	self.live_robots[robot]=1
 
 class Port(object):
     """An 8-bit port on the board."""
