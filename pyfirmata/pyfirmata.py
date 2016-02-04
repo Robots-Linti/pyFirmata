@@ -4,6 +4,7 @@ import time
 import itertools
 import os
 from util import two_byte_iter_to_str, to_two_bytes
+import socket
 from select import *
 
 
@@ -257,7 +258,7 @@ class Board(object):
         self.skt.sendall(chr(END_SYSEX))
 
     def bytes_available(self):
-        inputready, outputready, exceptrdy = select.select([self.skt.fileno()], [], [])
+        inputready, outputready, exceptrdy = select([self.skt.fileno()], [], [], 0)
         return inputready
 
     def iterate(self):
@@ -266,9 +267,12 @@ class Board(object):
         This method should be called in a main loop or in an :class:`Iterator`
         instance to keep this boards pin values up to date.
         """
-        byte = self.skt.recv(4096) # investigar sobre socket.read() si es que existe
+        byte = self.skt.recv(1) # investigar sobre socket.read() si es que existe
+        print("otrostring")
+
         if not byte:
             return
+        print("cualkqueirosdfksjd")
         data = ord(byte)
         received_data = []
         handler = None
@@ -280,23 +284,23 @@ class Board(object):
                 return
             received_data.append(data & 0x0F)
             while len(received_data) < handler.bytes_needed:
-                received_data.append(ord(self.skt.recv(4096))) # socket.read()
+                received_data.append(ord(self.skt.recv(1))) # socket.read()
         elif data == START_SYSEX:
-            data = ord(self.skt.recv(4096)) # socket.read()
+            data = ord(self.skt.recv(1)) # socket.read()
             handler = self._command_handlers.get(data)
             if not handler:
                 return
-            data = ord(self.skt.recv(4096))
+            data = ord(self.skt.recv(1))
             while data != END_SYSEX:
                 received_data.append(data)
-                data = ord(self.skt.recv(4096))
+                data = ord(self.skt.recv(1))
         else:
             try:
                 handler = self._command_handlers[data]
             except KeyError:
                 return
             while len(received_data) < handler.bytes_needed:
-                received_data.append(ord(self.skt.recv(4096)))
+                received_data.append(ord(self.skt.recv(1)))
         # Handle the data
         try:
             handler(*received_data)
