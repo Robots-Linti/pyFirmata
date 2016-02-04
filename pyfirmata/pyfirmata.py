@@ -267,12 +267,11 @@ class Board(object):
         This method should be called in a main loop or in an :class:`Iterator`
         instance to keep this boards pin values up to date.
         """
-        byte = self.skt.recv(1) # investigar sobre socket.read() si es que existe
-        print("otrostring")
+        byte = self.skt.recv(1)
 
         if not byte:
             return
-        print("cualkqueirosdfksjd")
+
         data = ord(byte)
         received_data = []
         handler = None
