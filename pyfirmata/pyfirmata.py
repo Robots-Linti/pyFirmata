@@ -4,6 +4,8 @@ import time
 import itertools
 import os
 from util import two_byte_iter_to_str, to_two_bytes
+from select import *
+
 
 # Message command bytes - straight from Firmata.h
 DIGITAL_MESSAGE = 0x90      # send data for a digital pin
@@ -85,7 +87,13 @@ class Board(object):
 
     def __init__(self, port, layout, baudrate=57600, name=None):
         try:
-            self.sp = serial.Serial(port, baudrate)
+            # self.sp = serial.Serial(port, baudrate)
+
+            robot_ip = '192.168.4.1'
+            port = 1234
+            self.skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.skt.connect((robot_ip, port))
+
             # Allow 5 secs for Arduino's auto-reset to happen
             # Alas, Firmata blinks its version before printing it to serial
             # For 2.3, even 5 seconds might not be enough.
@@ -122,7 +130,7 @@ class Board(object):
         self.exit()
 
     def send_as_two_bytes(self, val):
-        self.sp.write(chr(val % 128) + chr(val >> 7))
+        self.skt.sendall(chr(val % 128) + chr(val >> 7))
 
     def setup_layout(self, board_layout):
         """
@@ -235,8 +243,8 @@ class Board(object):
         :arg data: A list of 7-bit bytes of arbitrary data (bytes may be
             already converted to chr's)
         """
-        self.sp.write(chr(START_SYSEX))
-        self.sp.write(chr(sysex_cmd))
+        self.skt.sendall(chr(START_SYSEX))
+        self.skt.sendall(chr(sysex_cmd))
         for byte in data:
             try:
                 byte = chr(byte)
@@ -245,11 +253,12 @@ class Board(object):
             except ValueError:
                 raise ValueError('Sysex data can be 7-bit bytes only. '
                     'Consider using utils.to_two_bytes for bigger bytes.')
-            self.sp.write(byte)
-        self.sp.write(chr(END_SYSEX))
+            self.skt.sendall(byte)
+        self.skt.sendall(chr(END_SYSEX))
 
     def bytes_available(self):
-        return self.sp.inWaiting()
+        inputready, outputready, exceptrdy = select.select([self.skt.fileno()], [], [])
+        return inputready
 
     def iterate(self):
         """
@@ -257,7 +266,7 @@ class Board(object):
         This method should be called in a main loop or in an :class:`Iterator`
         instance to keep this boards pin values up to date.
         """
-        byte = self.sp.read()
+        byte = self.skt.recv(4096) # investigar sobre socket.read() si es que existe
         if not byte:
             return
         data = ord(byte)
@@ -271,23 +280,23 @@ class Board(object):
                 return
             received_data.append(data & 0x0F)
             while len(received_data) < handler.bytes_needed:
-                received_data.append(ord(self.sp.read()))
+                received_data.append(ord(self.skt.recv(4096))) # socket.read()
         elif data == START_SYSEX:
-            data = ord(self.sp.read())
+            data = ord(self.skt.recv(4096)) # socket.read()
             handler = self._command_handlers.get(data)
             if not handler:
                 return
-            data = ord(self.sp.read())
+            data = ord(self.skt.recv(4096))
             while data != END_SYSEX:
                 received_data.append(data)
-                data = ord(self.sp.read())
+                data = ord(self.skt.recv(4096))
         else:
             try:
                 handler = self._command_handlers[data]
             except KeyError:
                 return
             while len(received_data) < handler.bytes_needed:
-                received_data.append(ord(self.sp.read()))
+                received_data.append(ord(self.skt.recv(4096)))
         # Handle the data
         try:
             handler(*received_data)
@@ -325,7 +334,7 @@ class Board(object):
                 if pin.mode == SERVO:
                     pin.mode = OUTPUT
         if hasattr(self, 'sp'):
-            self.sp.close()
+            self.skt.close()
         self.running = 0
 
     # Command handlers
@@ -400,7 +409,7 @@ class Port(object):
         self.reporting = True
         msg = chr(REPORT_DIGITAL + self.port_number)
         msg += chr(1)
-        self.board.sp.write(msg)
+        self.board.skt.sendall(msg)
         for pin in self.pins:
             if pin.mode == INPUT:
                 pin.reporting = True  # TODO Shouldn't this happen at the pin?
@@ -410,7 +419,7 @@ class Port(object):
         self.reporting = False
         msg = chr(REPORT_DIGITAL + self.port_number)
         msg += chr(0)
-        self.board.sp.write(msg)
+        self.board.skt.sendall(msg)
 
     def write(self):
         """Set the output pins of the port to the correct state."""
@@ -423,7 +432,7 @@ class Port(object):
         msg = chr(DIGITAL_MESSAGE + self.port_number)
         msg += chr(mask % 128)
         msg += chr(mask >> 7)
-        self.board.sp.write(msg)
+        self.board.skt.sendall(msg)
 
     def _update(self, mask):
         """Update the values for the pins marked as input with the mask."""
@@ -470,7 +479,7 @@ class Pin(object):
         command = chr(SET_PIN_MODE)
         command += chr(self.pin_number)
         command += chr(mode)
-        self.board.sp.write(command)
+        self.board.skt.sendall(command)
         if mode == INPUT:
             self.enable_reporting()
 
@@ -491,7 +500,7 @@ class Pin(object):
             self.reporting = True
             msg = chr(REPORT_ANALOG + self.pin_number)
             msg += chr(1)
-            self.board.sp.write(msg)
+            self.board.skt.sendall(msg)
         else:
             self.port.enable_reporting() # TODO This is not going to work for non-optimized boards like Mega
 
@@ -501,7 +510,7 @@ class Pin(object):
             self.reporting = False
             msg = chr(REPORT_ANALOG + self.pin_number)
             msg += chr(0)
-            self.board.sp.write(msg)
+            self.board.skt.sendall(msg)
         else:
             self.port.disable_reporting() # TODO This is not going to work for non-optimized boards like Mega
 
@@ -537,16 +546,16 @@ class Pin(object):
                     msg = chr(DIGITAL_MESSAGE)
                     msg += chr(self.pin_number)
                     msg += chr(value)
-                    self.board.sp.write(msg)
+                    self.board.skt.sendall(msg)
             elif self.mode is PWM:
                 value = int(round(value * 255))
                 msg = chr(ANALOG_MESSAGE + self.pin_number)
                 msg += chr(value % 128)
                 msg += chr(value >> 7)
-                self.board.sp.write(msg)
+                self.board.skt.sendall(msg)
             elif self.mode is SERVO:
                 value = int(value)
                 msg = chr(ANALOG_MESSAGE + self.pin_number)
                 msg += chr(value % 128)
                 msg += chr(value >> 7)
-                self.board.sp.write(msg)
+                self.board.skt.sendall(msg)
