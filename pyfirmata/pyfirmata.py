@@ -90,10 +90,10 @@ class Board(object):
         try:
             # self.sp = serial.Serial(port, baudrate)
 
-            robot_ip = '192.168.4.1'
-            port = 1234
-            self.skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.skt.connect((robot_ip, port))
+            robot_ip = '192.168.4.1' # Esta ip es única debido a que cada pc se conectará a un solo robot.
+            port = 1234 # Lo mismo que la ip. Estas dos opciones son configurables.
+            self.skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # Se crea el socket
+            self.skt.connect((robot_ip, port)) # Se crea la conexion
 
             # Allow 5 secs for Arduino's auto-reset to happen
             # Alas, Firmata blinks its version before printing it to serial
@@ -267,7 +267,7 @@ class Board(object):
         This method should be called in a main loop or in an :class:`Iterator`
         instance to keep this boards pin values up to date.
         """
-        byte = self.skt.recv(1)
+        byte = self.skt.recv(1) # Usamos un solo byte para poder iterar sobre los siguientes.
 
         if not byte:
             return
