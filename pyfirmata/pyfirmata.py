@@ -90,10 +90,14 @@ class Board(object):
         try:
             # self.sp = serial.Serial(port, baudrate)
 
-            robot_ip = '192.168.4.1' # Esta ip es única debido a que cada pc se conectará a un solo robot.
-            port = 1234 # Lo mismo que la ip. Estas dos opciones son configurables.
-            self.skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # Se crea el socket
-            self.skt.connect((robot_ip, port)) # Se crea la conexion
+            robot_ip = '192.168.4.1' # Esta ip es única debido a que cada pc se
+                                     # conectará a un solo robot.
+            port = 1234 # Lo mismo que la ip.
+                        # Estas dos opciones son configurables.
+            self.skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # Se crea el socket
+            self.skt.connect((robot_ip, port))
+            # Se crea la conexion
 
             # Allow 5 secs for Arduino's auto-reset to happen
             # Alas, Firmata blinks its version before printing it to serial
@@ -107,7 +111,8 @@ class Board(object):
             # Iterate over the first messages to get firmware data
             while self.bytes_available():
                 self.iterate()
-            # TODO Test whether we got a firmware name and version, otherwise there
+            # TODO Test whether we got a firmware name and version,
+            # otherwise there
             # probably isn't any Firmata installed
             self.running = 1
         except serial.SerialException:
