@@ -90,8 +90,8 @@ class Board(object):
         try:
             # self.sp = serial.Serial(port, baudrate)
 
-            robot_ip = '192.168.4.1' # Esta ip es única debido a que cada pc se
-                                     # conectará a un solo robot.
+            robot_ip = '192.168.4.1' # Esta ip es unica debido a que cada pc se
+                                     # conectara a un solo robot.
             port = 1234 # Lo mismo que la ip.
                         # Estas dos opciones son configurables.
             self.skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
