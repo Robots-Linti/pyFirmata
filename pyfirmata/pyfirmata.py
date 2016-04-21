@@ -92,7 +92,7 @@ class Board(object):
             self.sp = serial.Serial(port, baudrate)
             if name is None:
                 name = port
-            self.__generic_initialization(layout, self.sp, name)
+            self._generic_initialization(layout, name)
         except serial.SerialException:
             if os.path.exists(port) and not os.access(port, os.R_OK | os.W_OK):
                 print ("No tiene permisos para acceder al dispositivo,"
@@ -102,7 +102,7 @@ class Board(object):
                        "y configure el XBee")
             raise  # re-raise the exception to allow the caller to handle this
 
-    def __generic_initialization(self, layout, serial_like, name):
+    def _generic_initialization(self, layout, name):
         # Allow 5 secs for Arduino's auto-reset to happen
         # Alas, Firmata blinks its version before printing it to serial
         # For 2.3, even 5 seconds might not be enough.
@@ -395,14 +395,16 @@ class _WrapTCPSocket(object):
         self.skt = socket
 
     def read(self):
-        return self.skt.recv(1)
+        if self.inWaiting():
+            return self.skt.recv(1)
+        return ''
 
     def write(self, data):
         self.skt.sendall(data)
 
     def inWaiting(self):
-        inputready, outputready, exceptrdy = select.select([self.skt.fileno()], [], [], 0)
-        return inputready
+        inputready, _, _ = select.select([self.skt.fileno()], [], [], 0)
+        return 1 if inputready else 0
 
     def close(self):
         self.skt.close()
