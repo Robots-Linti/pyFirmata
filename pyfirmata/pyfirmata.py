@@ -411,7 +411,7 @@ class _WrapTCPSocket(object):
 
 
 class TCPBoard(Board):
-    def __init__(self, robot_ip, port, name=None):
+    def __init__(self, robot_ip, port, layout, name=None):
         # Se crea el socket
         self.skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Se crea la conexión
@@ -424,6 +424,7 @@ class TCPBoard(Board):
             self.name = "{}:{}".format(robot_ip, port)
         else:
             self.name = name
+        self._generic_initialization(layout, name)
 
 
 class Port(object):
