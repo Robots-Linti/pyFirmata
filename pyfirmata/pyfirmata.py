@@ -1,4 +1,3 @@
-import serial
 import inspect
 import time
 import itertools
@@ -115,7 +114,7 @@ class Board(object):
             # otherwise there
             # probably isn't any Firmata installed
             self.running = 1
-        except serial.SerialException:
+        except Exception:
             if os.path.exists(port) and not os.access(port, os.R_OK | os.W_OK):
                 print ("No tiene permisos para acceder al dispositivo,"
                       " verifique si su usuario pertenece al grupo dialout")
