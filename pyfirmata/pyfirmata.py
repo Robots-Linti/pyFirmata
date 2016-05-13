@@ -87,7 +87,7 @@ class Board(object):
     digital_value = [-1 for i in range(128)]
     live_robots = [0 for i in range(128)]
 
-    def __init__(self, port, layout, baudrate=57600, name=None):
+    def __init__(self, port, layout, baudrate=57600, name=None, debug=False):
         try:
             self.sp = serial.Serial(port, baudrate)
             if name is None:
@@ -96,11 +96,14 @@ class Board(object):
         except serial.SerialException:
             if os.path.exists(port) and not os.access(port, os.R_OK | os.W_OK):
                 print ("No tiene permisos para acceder al dispositivo,"
-                       " verifique si su usuario pertenece al grupo dialout")
+                       " verifique si su usuario pertenece al grupo dialout.")
             else:
                 print ("No es posible conectarse al robot, por favor enchufe "
-                       "y configure el XBee")
-            raise  # re-raise the exception to allow the caller to handle this
+                       "y configure el XBee.")
+            if debug:
+                raise  # re-raise the exception to allow the caller to handle this
+            else:
+                exit(1)
 
     def _generic_initialization(self, layout, name):
         # Allow 5 secs for Arduino's auto-reset to happen
@@ -127,7 +130,10 @@ class Board(object):
         closed without calling board.exit() (which closes the serial
         connection). Therefore also do it here and hope it helps.
         """
-        self.exit()
+        try:
+            self.exit()
+        except AttributeError:
+            pass
 
     def send_as_two_bytes(self, val):
         self.sp.write(chr(val % 128) + chr(val >> 7))
@@ -273,36 +279,43 @@ class Board(object):
         data = ord(byte)
         received_data = []
         handler = None
-        if data < START_SYSEX:
-            # These commands can have 'channel data' like a pin nummber appended.
-            try:
-                handler = self._command_handlers[data & 0xF0]
-            except KeyError:
-                return
-            received_data.append(data & 0x0F)
-            while len(received_data) < handler.bytes_needed:
-                received_data.append(ord(self.sp.read()))
-        elif data == START_SYSEX:
-            data = ord(self.sp.read())
-            handler = self._command_handlers.get(data)
-            if not handler:
-                return
-            data = ord(self.sp.read())
-            while data != END_SYSEX:
-                received_data.append(data)
-                data = ord(self.sp.read())
-        else:
-            try:
-                handler = self._command_handlers[data]
-            except KeyError:
-                return
-            while len(received_data) < handler.bytes_needed:
-                received_data.append(ord(self.sp.read()))
-        # Handle the data
         try:
-            handler(*received_data)
-        except ValueError:
+            if data < START_SYSEX:
+                # These commands can have 'channel data' like a pin nummber appended.
+                try:
+                    handler = self._command_handlers[data & 0xF0]
+                except KeyError:
+                    return
+                received_data.append(data & 0x0F)
+                while len(received_data) < handler.bytes_needed:
+                    received_data.append(ord(self.sp.read()))
+            elif data == START_SYSEX:
+                data = ord(self.sp.read())
+                handler = self._command_handlers.get(data)
+                if not handler:
+                    return
+                data = ord(self.sp.read())
+                while data != END_SYSEX:
+                    received_data.append(data)
+                    data = ord(self.sp.read())
+            else:
+                try:
+                    handler = self._command_handlers[data]
+                except KeyError:
+                    return
+                while len(received_data) < handler.bytes_needed:
+                    received_data.append(ord(self.sp.read()))
+        except TypeError:
+            # ord() de un mensaje vacío lanza TypeError, común si
+            # se pieden datos
             pass
+        else:
+            # Si no hay errores
+            # Handle the data
+            try:
+                handler(*received_data)
+            except ValueError:
+                pass
 
     def get_firmata_version(self):
         """
@@ -395,9 +408,10 @@ class _WrapTCPSocket(object):
         self.skt = socket
 
     def read(self):
-        if self.inWaiting():
+        try:
             return self.skt.recv(1)
-        return ''
+        except socket.error:
+            return ''
 
     def write(self, data):
         self.skt.sendall(data)
@@ -411,11 +425,20 @@ class _WrapTCPSocket(object):
 
 
 class TCPBoard(Board):
-    def __init__(self, robot_ip, port, layout, name=None):
-        # Se crea el socket
-        self.skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # Se crea la conexión
-        self.skt.connect((robot_ip, port))
+    def __init__(self, robot_ip, port, layout, name=None, debug=False):
+        try:
+            # Se crea el socket
+            self.skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.skt.settimeout(5)
+            # Se crea la conexión
+            self.skt.connect((robot_ip, port))
+        except socket.error:
+            print('Error al intentar conectarse al robot, verifique '
+                  'que el módulo WiFi esté encendido.')
+            if debug:
+                raise
+            else:
+                exit(1)
         # Wrapper que simula una instancia de Serial
         self.sp = _WrapTCPSocket(self.skt)
         self.ip = robot_ip
