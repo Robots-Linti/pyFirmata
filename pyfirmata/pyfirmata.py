@@ -31,6 +31,9 @@ SYSEX_PING = 0x03
 ANALOG_INPUT_REQUEST = 0x06
 DIGITAL_INPUT_REQUEST = 0x07
 BROADCAST_REPORT = 0x09
+PIN_COMMANDS = 0x0F
+PIN_GET_ANALOG = 0x01
+PIN_GET_DIGITAL = 0x02
 
 
 SERVO_CONFIG = 0x70         # set max angle, minPulse, maxPulse, freq
@@ -113,6 +116,10 @@ class Board(object):
         self.pass_time(BOARD_SETUP_WAIT_TIME)
         self.name = name
         self.setup_layout(layout)
+
+        self._pin_analog_value = {}
+        self._pin_digital_value = {}
+
         # Iterate over the first messages to get firmware data
         while self.bytes_available():
             self.iterate()
@@ -181,6 +188,7 @@ class Board(object):
         self.add_cmd_handler(ANALOG_INPUT_REQUEST, self._handle_sysex_analog)
         self.add_cmd_handler(DIGITAL_INPUT_REQUEST, self._handle_sysex_digital)
         self.add_cmd_handler(BROADCAST_REPORT, self._handle_sysex_broadcast)
+        self.add_cmd_handler(PIN_COMMANDS, self._handle_sysex_pin_commands)
 
     def add_cmd_handler(self, cmd, func):
         """Adds a command handler for a command."""
@@ -279,43 +287,36 @@ class Board(object):
         data = ord(byte)
         received_data = []
         handler = None
-        try:
-            if data < START_SYSEX:
-                # These commands can have 'channel data' like a pin nummber appended.
-                try:
-                    handler = self._command_handlers[data & 0xF0]
-                except KeyError:
-                    return
-                received_data.append(data & 0x0F)
-                while len(received_data) < handler.bytes_needed:
-                    received_data.append(ord(self.sp.read()))
-            elif data == START_SYSEX:
-                data = ord(self.sp.read())
-                handler = self._command_handlers.get(data)
-                if not handler:
-                    return
-                data = ord(self.sp.read())
-                while data != END_SYSEX:
-                    received_data.append(data)
-                    data = ord(self.sp.read())
-            else:
-                try:
-                    handler = self._command_handlers[data]
-                except KeyError:
-                    return
-                while len(received_data) < handler.bytes_needed:
-                    received_data.append(ord(self.sp.read()))
-        except TypeError:
-            # ord() de un mensaje vacío lanza TypeError, común si
-            # se pieden datos
-            pass
-        else:
-            # Si no hay errores
-            # Handle the data
+
+        if data < START_SYSEX:
+            # These commands can have 'channel data' like a pin nummber appended.
             try:
-                handler(*received_data)
-            except ValueError:
-                pass
+                handler = self._command_handlers[data & 0xF0]
+            except KeyError:
+                return
+            received_data.append(data & 0x0F)
+            while len(received_data) < handler.bytes_needed:
+                received_data.append(ord(self.sp.read()))
+        elif data == START_SYSEX:
+            data = ord(self.sp.read())
+            handler = self._command_handlers.get(data)
+            if not handler:
+                return
+            data = ord(self.sp.read())
+            while data != END_SYSEX:
+                received_data.append(data)
+                data = ord(self.sp.read())
+        else:
+            try:
+                handler = self._command_handlers[data]
+            except KeyError:
+                return
+            while len(received_data) < handler.bytes_needed:
+                received_data.append(ord(self.sp.read()))
+        try:
+            handler(*received_data)
+        except ValueError:
+            pass
 
     def get_firmata_version(self):
         """
@@ -401,6 +402,32 @@ class Board(object):
     def _handle_sysex_broadcast(self, *data):
         robot = data[0]
         self.live_robots[robot] = 1
+
+    def pin_analog_value(self, robotid):
+        return self._pin_analog_value.setdefault(
+            robotid,
+            [-1] * len(self.analog)
+        )
+
+    def pin_digital_value(self, robotid):
+        return self._pin_digital_value.setdefault(
+            robotid,
+            [-1] * len(self.digital)
+        )
+
+    def _handle_sysex_pin_commands(self, *data):
+        # Versión mejorada que reemplaza a sysex_analog y sysex_digital
+        if data[0] == PIN_GET_ANALOG:
+            major = data[1]
+            minor = data[2]
+            pin = data[3]
+            robot = data[4]
+            self.pin_analog_value(robot)[pin] = minor + major * 128
+        elif data[0] == PIN_GET_DIGITAL:
+            major = data[1]
+            pin = data[2]
+            robot = data[3]
+            self.pin_digital_value(robot)[pin] = major
 
 
 class _WrapTCPSocket(object):
