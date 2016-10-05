@@ -41,4 +41,16 @@ class DuinoBot(Board):
     
     def __str__(self):
         return 'DuinoBot %s on %s' % (self.name, self.sp.port)
-        
+
+
+class TCPDuinoBot(TCPBoard):
+    """
+    A board that wil set itself up as an DuinoBot.
+    """
+    def __init__(self, *args, **kwargs):
+        args = list(args)
+        args.append(BOARDS['duinobot'])
+        super(TCPDuinoBot, self).__init__(*args, **kwargs)
+
+    def __str__(self):
+        return 'TCPDuinoBot %s on %s:%s' % (self.name, self.ip, self.port)
