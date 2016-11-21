@@ -15,7 +15,7 @@ BOARDS = {
     },
     'duinobot' : {
         'digital' : tuple(x for x in range(19)),
-        'analog' : tuple(x for x in range(6)),
+        'analog' : tuple(x for x in range(7)),
         'pwm' : (5, 6, 9),
         'use_ports' : True,
         'disabled' : (0, 1, 3, 4, 8)
